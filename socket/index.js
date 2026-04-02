@@ -1,7 +1,7 @@
 const jwt = require('jsonwebtoken');
 
 module.exports = (io) => {
-  // Auth middleware for socket
+  // Auth middleware for socket 
   io.use((socket, next) => {
     const token = socket.handshake.auth?.token;
     if (!token) return next(new Error('Authentication error'));
