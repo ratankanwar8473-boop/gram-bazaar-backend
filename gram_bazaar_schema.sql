@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS seller_profiles (
 CREATE TABLE IF NOT EXISTS services (
   id          INT AUTO_INCREMENT PRIMARY KEY,
   seller_id   INT NOT NULL,
-  type        ENUM('tent','saman','gadi','tractor','khana','karigar') NOT NULL,
+  type        ENUM('tent','kirana','gadi','tractor','khana','karigar','garments','hardware','electronics','furniture','medical','other') NOT NULL,
   title       VARCHAR(150) NOT NULL,
   description TEXT,
   price       DECIMAL(10,2) NOT NULL,
@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS services (
 CREATE TABLE IF NOT EXISTS products (
   id           INT AUTO_INCREMENT PRIMARY KEY,
   seller_id    INT NOT NULL,
-  category     ENUM('saman','khana') NOT NULL,
+  category     ENUM('kirana','khana','garments','hardware','electronics','furniture','medical','other') NOT NULL,
   name         VARCHAR(150) NOT NULL,
   description  VARCHAR(255),
   price        DECIMAL(8,2) NOT NULL,
@@ -84,7 +84,7 @@ CREATE TABLE IF NOT EXISTS orders (
   order_number    VARCHAR(20) NOT NULL UNIQUE,
   customer_id     INT NOT NULL,
   seller_id       INT NOT NULL,
-  service_type    ENUM('tent','saman','gadi','tractor','khana','karigar') NOT NULL,
+  service_type    ENUM('tent','kirana','gadi','tractor','khana','karigar','garments','hardware','electronics','furniture','medical','other') NOT NULL,
   status          ENUM('pending','confirmed','in_progress','completed','cancelled') DEFAULT 'pending',
   total_amount    DECIMAL(10,2) NOT NULL,
   payment_status  ENUM('pending','paid','refunded') DEFAULT 'pending',

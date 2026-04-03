@@ -34,6 +34,9 @@ const corsOptions = {
 const io = new Server(server, { cors: { origin: '*', methods: ['GET','POST'] } });
 socketSetup(io);
 
+// ─── Trust Proxy (Railway/Vercel ke liye zaroori) ────────
+app.set('trust proxy', 1);
+
 // ─── Middleware (CORS first!) ─────────────────────────────
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
@@ -72,7 +75,8 @@ async function autoSetup() {
 
     // 1. Add super_admin to role enum (safe if already exists)
     try {
-      await db.query(`ALTER TABLE users MODIFY COLUMN role ENUM('customer','seller','admin','super_admin') DEFAULT 'customer'`);
+      await db.query(`ALTER TABLE services MODIFY COLUMN type ENUM('tent','kirana','gadi','tractor','khana','karigar','garments','hardware','electronics','furniture','medical','other') NOT NULL`);
+      await db.query(`ALTER TABLE orders MODIFY COLUMN service_type ENUM('tent','kirana','gadi','tractor','khana','karigar','garments','hardware','electronics','furniture','medical','other') NOT NULL`);
       console.log('✅ DB: super_admin role enum added');
     } catch(e) {
       console.log('ℹ️  DB: role enum already up to date');
