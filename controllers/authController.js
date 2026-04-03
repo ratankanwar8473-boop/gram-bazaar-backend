@@ -34,6 +34,21 @@ exports.register = async (req, res) => {
         'INSERT INTO seller_profiles (user_id, business_name) VALUES (?,?)',
         [userId, business_name || name + ' Services']
       );
+
+      // Auto assign 1 month free trial license
+      try {
+        const licKey = uuidv4().replace(/-/g,'').substring(0,32).toUpperCase();
+        const startDate = new Date().toISOString().slice(0,10);
+        const expiryDate = new Date(Date.now() + 30*24*60*60*1000).toISOString().slice(0,10);
+        await db.query(
+          `INSERT INTO seller_licenses (seller_id, license_key, type, status, amount_paid, start_date, expiry_date, issued_by, notes)
+           VALUES (?, ?, 'trial', 'active', 0, ?, ?, 1, '1 month free trial on registration')`,
+          [userId, licKey, startDate, expiryDate]
+        );
+      } catch(licErr) {
+        console.warn('License auto-assign warning:', licErr.message);
+        // Don't block registration if license fails
+      }
     }
 
     const token = signToken(userId, safeRole);
