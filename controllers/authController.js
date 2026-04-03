@@ -60,7 +60,12 @@ exports.login = async (req, res) => {
     );
 
     if (!rows.length) {
-      return res.status(401).json({ success: false, message: 'Phone number registered nahi hai ya account inactive hai.' });
+      // Check if user exists but is blocked
+    const [blockedCheck] = await db.query('SELECT id, is_active FROM users WHERE phone = ?', [phone]);
+    if (blockedCheck.length && blockedCheck[0].is_active === 0) {
+      return res.status(401).json({ success: false, message: '🚫 Aapka account block hai. Super Admin se contact karein: 8875448173' });
+    }
+    return res.status(401).json({ success: false, message: 'Phone number registered nahi hai.' });
     }
 
     const user = rows[0];
