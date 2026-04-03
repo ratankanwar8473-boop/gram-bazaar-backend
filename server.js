@@ -14,109 +14,124 @@ const socketSetup = require('./socket');
 const app    = express();
 const server = http.createServer(app);
 
-// ─── CORS Config ─────────────────────────────────────────
-// Allow all Vercel deployments + localhost dev
-const ALLOWED_ORIGINS = [
-  process.env.FRONTEND_URL,
-  'https://gram-bazaar-frontend.vercel.app',
-  'http://localhost:3000',
-  'http://localhost:5000',
-  'http://127.0.0.1:5500',
-].filter(Boolean);
-
+// ─── CORS ────────────────────────────────────────────────
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests with no origin (mobile apps, curl, Postman)
     if (!origin) return callback(null, true);
-    // Allow any vercel.app subdomain
     if (origin.endsWith('.vercel.app')) return callback(null, true);
-    // Allow any localhost
     if (origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1')) return callback(null, true);
-    // Check explicit list
-    if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
-    // In development, allow all
+    if (process.env.FRONTEND_URL && origin === process.env.FRONTEND_URL) return callback(null, true);
     if (process.env.NODE_ENV !== 'production') return callback(null, true);
-    callback(new Error('CORS: Origin not allowed: ' + origin));
+    callback(new Error('CORS: Not allowed: ' + origin));
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  optionsSuccessStatus: 200  // Some browsers (IE11) choke on 204
+  methods: ['GET','POST','PUT','DELETE','OPTIONS','PATCH'],
+  allowedHeaders: ['Content-Type','Authorization','X-Requested-With'],
+  optionsSuccessStatus: 200
 };
 
 // ─── Socket.io ───────────────────────────────────────────
-const io = new Server(server, {
-  cors: { origin: '*', methods: ['GET', 'POST'] }
-});
+const io = new Server(server, { cors: { origin: '*', methods: ['GET','POST'] } });
 socketSetup(io);
 
-// ─── Core Middleware ─────────────────────────────────────
-// CORS MUST be first — before everything including rate limiter
+// ─── Middleware (CORS first!) ─────────────────────────────
 app.use(cors(corsOptions));
-
-// Handle OPTIONS preflight for ALL routes explicitly
 app.options('*', cors(corsOptions));
-
 app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
 
 // ─── Rate Limiting ───────────────────────────────────────
-// Applied AFTER cors so preflight is never blocked
-const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 300,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { success: false, message: 'Too many requests. 15 min baad try karein.' }
-});
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 20,
-  message: { success: false, message: 'Bahut zyada login attempts. 15 min baad try karein.' }
-});
+app.use('/api/', rateLimit({ windowMs: 15*60*1000, max: 300, standardHeaders: true, legacyHeaders: false }));
+app.use('/api/auth/login', rateLimit({ windowMs: 15*60*1000, max: 20 }));
 
-app.use('/api/', generalLimiter);
-app.use('/api/auth/login', loginLimiter);
-
-// ─── Static Files ────────────────────────────────────────
+// ─── Static ──────────────────────────────────────────────
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
-// ─── Attach Socket to Requests ───────────────────────────
 app.use((req, _, next) => { req.io = io; next(); });
 
-// ─── API Routes ──────────────────────────────────────────
+// ─── Routes ──────────────────────────────────────────────
 app.use('/api', routes);
 
-// ─── Health Check ────────────────────────────────────────
-app.get('/health', (_, res) => res.json({
-  status: 'ok',
-  app: 'Gram Bazaar API v2',
-  time: new Date(),
-  env: process.env.NODE_ENV || 'development'
-}));
+// ─── Health ──────────────────────────────────────────────
+app.get('/health', (_, res) => res.json({ status: 'ok', app: 'Gram Bazaar API v2', time: new Date() }));
 
-// ─── 404 ─────────────────────────────────────────────────
+// ─── 404 / Error ─────────────────────────────────────────
 app.use((req, res) => res.status(404).json({ success: false, message: 'Route nahi mili: ' + req.path }));
-
-// ─── Global Error Handler ────────────────────────────────
 app.use((err, req, res, next) => {
-  // CORS errors
-  if (err.message && err.message.startsWith('CORS:')) {
-    return res.status(403).json({ success: false, message: err.message });
-  }
-  console.error('Server error:', err);
+  console.error('Server error:', err.message);
   res.status(500).json({ success: false, message: err.message || 'Server error.' });
 });
 
-// ─── Start Server ────────────────────────────────────────
+// ─── Auto-setup on first start ───────────────────────────
+async function autoSetup() {
+  try {
+    const db = require('./config/db');
+    const bcrypt = require('bcryptjs');
+    const { v4: uuidv4 } = require('uuid');
+
+    // 1. Add super_admin to role enum (safe if already exists)
+    try {
+      await db.query(`ALTER TABLE users MODIFY COLUMN role ENUM('customer','seller','admin','super_admin') DEFAULT 'customer'`);
+      console.log('✅ DB: super_admin role enum added');
+    } catch(e) {
+      console.log('ℹ️  DB: role enum already up to date');
+    }
+
+    // 2. Create seller_licenses table
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS seller_licenses (
+        id           INT AUTO_INCREMENT PRIMARY KEY,
+        seller_id    INT NOT NULL,
+        license_key  VARCHAR(64) NOT NULL UNIQUE,
+        type         ENUM('trial','monthly','quarterly','yearly','lifetime') DEFAULT 'monthly',
+        status       ENUM('active','expired','revoked') DEFAULT 'active',
+        amount_paid  DECIMAL(10,2) DEFAULT 0.00,
+        start_date   DATE NOT NULL,
+        expiry_date  DATE,
+        issued_by    INT NOT NULL,
+        notes        TEXT,
+        created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at   DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_seller (seller_id),
+        INDEX idx_expiry (expiry_date)
+      )
+    `);
+    console.log('✅ DB: seller_licenses table ready');
+
+    // 3. Create / update super admin user
+    const phone    = '8875448173';
+    const password = 'Laksh@8173';
+    const hashed   = await bcrypt.hash(password, 10);
+
+    const [existing] = await db.query('SELECT id FROM users WHERE phone = ?', [phone]);
+    if (existing.length) {
+      await db.query(
+        `UPDATE users SET name='Laksh', password=?, role='super_admin', is_active=1, is_verified=1 WHERE phone=?`,
+        [hashed, phone]
+      );
+      console.log('✅ DB: Super admin updated (id:', existing[0].id, ')');
+    } else {
+      const [r] = await db.query(
+        `INSERT INTO users (uuid,name,phone,email,password,role,is_active,is_verified) VALUES (?,?,?,?,?,'super_admin',1,1)`,
+        [uuidv4(), 'Laksh', phone, 'superadmin@grambazaar.in', hashed]
+      );
+      console.log('✅ DB: Super admin created (id:', r.insertId, ')');
+    }
+
+    console.log('\n🛡️  Super Admin ready → Phone: 8875448173 | Password: Laksh@8173\n');
+  } catch(err) {
+    console.error('⚠️  Auto-setup warning:', err.message);
+    // Don't crash — DB might just be starting up
+  }
+}
+
+// ─── Start ───────────────────────────────────────────────
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`\n🌾 Gram Bazaar API v2 running on port ${PORT}`);
-  console.log(`   Health: http://localhost:${PORT}/health`);
-  console.log(`   API:    http://localhost:${PORT}/api`);
-  console.log(`   CORS:   ${ALLOWED_ORIGINS.join(', ') || 'all origins'}\n`);
+server.listen(PORT, '0.0.0.0', async () => {
+  console.log(`\n🌾 Gram Bazaar API v2 on port ${PORT} | ${process.env.NODE_ENV || 'development'}`);
+  // Wait 3 seconds for DB connection pool to be ready, then auto-setup
+  setTimeout(autoSetup, 3000);
 });
 
 module.exports = { app, server };
