@@ -22,7 +22,7 @@ pool.getConnection()
   .catch(err => {
     console.error('❌ MySQL connection failed:', err.message);
     console.error('   DB_HOST:', process.env.MYSQLHOST || process.env.DB_HOST);
-    process.exit(1);
+    // process.exit(1) hata diya — server chalta rahega aur retry karega
   });
 
 module.exports = pool;
