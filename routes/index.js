@@ -12,6 +12,7 @@ const notifCtrl  = require('../controllers/notificationController');
 // ─── AUTH ────────────────────────────────────────────────
 router.post('/auth/register',         authCtrl.register);
 router.post('/auth/login',            authCtrl.login);
+router.post('/auth/logout',           authMiddleware, authCtrl.logout);
 router.get ('/auth/profile',          authMiddleware, authCtrl.getProfile);
 router.put ('/auth/profile',          authMiddleware, authCtrl.updateProfile);
 router.put ('/auth/change-password',  authMiddleware, authCtrl.changePassword);

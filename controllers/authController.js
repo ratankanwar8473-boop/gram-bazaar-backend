@@ -98,6 +98,13 @@ exports.login = async (req, res) => {
 };
 
 // ─── GET PROFILE ─────────────────────────────────────────
+// ─── LOGOUT ──────────────────────────────────────────────
+exports.logout = async (req, res) => {
+  // JWT stateless hai — client side token clear hoga
+  // Yahan future mein token blacklist add kar sakte hain
+  res.json({ success: true, message: 'Logout successful.' });
+};
+
 exports.getProfile = async (req, res) => {
   try {
     const [rows] = await db.query(
