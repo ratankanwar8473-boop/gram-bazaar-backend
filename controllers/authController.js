@@ -3,7 +3,6 @@ const jwt      = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 const db       = require('../config/db');
 
-// ─── Generate JWT ────────────────────────────────────────
 const signToken = (id, role) =>
   jwt.sign({ id, role }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
 
@@ -11,8 +10,10 @@ const signToken = (id, role) =>
 exports.register = async (req, res) => {
   const { name, phone, email, password, role = 'customer', village, district, business_name } = req.body;
 
+  // Block registering as super_admin via API
+  const safeRole = ['customer','seller'].includes(role) ? role : 'customer';
+
   try {
-    // Check duplicate phone
     const [existing] = await db.query('SELECT id FROM users WHERE phone = ?', [phone]);
     if (existing.length) {
       return res.status(400).json({ success: false, message: 'Yeh phone number pehle se registered hai.' });
@@ -23,26 +24,24 @@ exports.register = async (req, res) => {
 
     const [result] = await db.query(
       'INSERT INTO users (uuid, name, phone, email, password, role, village, district) VALUES (?,?,?,?,?,?,?,?)',
-      [uuid, name, phone, email || null, hashed, role, village || null, district || null]
+      [uuid, name, phone, email || null, hashed, safeRole, village || null, district || null]
     );
 
     const userId = result.insertId;
 
-    // If seller, create seller profile
-    if (role === 'seller') {
+    if (safeRole === 'seller') {
       await db.query(
         'INSERT INTO seller_profiles (user_id, business_name) VALUES (?,?)',
         [userId, business_name || name + ' Services']
       );
     }
 
-    const token = signToken(userId, role);
-
+    const token = signToken(userId, safeRole);
     res.status(201).json({
       success: true,
       message: 'Registration successful!',
       token,
-      user: { id: userId, uuid, name, phone, role }
+      user: { id: userId, uuid, name, phone, role: safeRole }
     });
   } catch (err) {
     console.error('Register error:', err);
@@ -61,7 +60,7 @@ exports.login = async (req, res) => {
     );
 
     if (!rows.length) {
-      return res.status(401).json({ success: false, message: 'Phone number registered nahi hai.' });
+      return res.status(401).json({ success: false, message: 'Phone number registered nahi hai ya account inactive hai.' });
     }
 
     const user = rows[0];
@@ -70,7 +69,6 @@ exports.login = async (req, res) => {
       return res.status(401).json({ success: false, message: 'Password galat hai.' });
     }
 
-    // Get seller profile if seller
     let sellerProfile = null;
     if (user.role === 'seller') {
       const [sp] = await db.query('SELECT * FROM seller_profiles WHERE user_id = ?', [user.id]);
@@ -81,15 +79,17 @@ exports.login = async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Login successful!',
       token,
       user: {
-        id: user.id, uuid: user.uuid, name: user.name,
-        phone: user.phone, email: user.email, role: user.role,
-        village: user.village, district: user.district,
-        avatar: user.avatar
-      },
-      sellerProfile
+        id: user.id,
+        uuid: user.uuid,
+        name: user.name,
+        phone: user.phone,
+        email: user.email,
+        role: user.role,
+        village: user.village,
+        sellerProfile
+      }
     });
   } catch (err) {
     console.error('Login error:', err);
@@ -143,13 +143,23 @@ exports.updateProfile = async (req, res) => {
 
 // ─── CHANGE PASSWORD ─────────────────────────────────────
 exports.changePassword = async (req, res) => {
-  const { old_password, new_password } = req.body;
+  // Accept both old_password and current_password
+  const current = req.body.current_password || req.body.old_password;
+  const newPwd   = req.body.new_password;
+
+  if (!current || !newPwd) {
+    return res.status(400).json({ success: false, message: 'Current aur new password dono dalein.' });
+  }
+  if (newPwd.length < 6) {
+    return res.status(400).json({ success: false, message: 'New password kam se kam 6 characters ka hona chahiye.' });
+  }
+
   try {
     const [rows] = await db.query('SELECT password FROM users WHERE id=?', [req.user.id]);
-    const isMatch = await bcrypt.compare(old_password, rows[0].password);
+    const isMatch = await bcrypt.compare(current, rows[0].password);
     if (!isMatch) return res.status(400).json({ success: false, message: 'Purana password galat hai.' });
 
-    const hashed = await bcrypt.hash(new_password, 10);
+    const hashed = await bcrypt.hash(newPwd, 10);
     await db.query('UPDATE users SET password=? WHERE id=?', [hashed, req.user.id]);
     res.json({ success: true, message: 'Password change ho gaya!' });
   } catch (err) {

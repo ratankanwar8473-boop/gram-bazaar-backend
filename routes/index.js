@@ -43,11 +43,12 @@ router.get ('/payment/transactions',  authMiddleware, requireRole('seller'),   p
 router.get ('/notifications',         authMiddleware, notifCtrl.getNotifications);
 router.put ('/notifications/:id/read',authMiddleware, notifCtrl.markRead);
 
-// ─── ADMIN ───────────────────────────────────────────────
-router.get ('/admin/overview',        authMiddleware, requireRole('admin'), adminCtrl.overview);
-router.get ('/admin/users',           authMiddleware, requireRole('admin'), adminCtrl.listUsers);
-router.put ('/admin/users/:id/toggle',authMiddleware, requireRole('admin'), adminCtrl.toggleUser);
-router.get ('/admin/orders',          authMiddleware, requireRole('admin'), adminCtrl.listOrders);
-router.post('/admin/broadcast',       authMiddleware, requireRole('admin'), adminCtrl.broadcast);
+// ─── ADMIN & SUPER ADMIN ─────────────────────────────────
+router.get ('/admin/overview',         authMiddleware, requireRole('admin'), adminCtrl.overview);
+router.get ('/admin/users',            authMiddleware, requireRole('admin'), adminCtrl.listUsers);
+router.put ('/admin/users/:id/toggle', authMiddleware, requireRole('admin'), adminCtrl.toggleUser);
+router.get ('/admin/orders',           authMiddleware, requireRole('admin'), adminCtrl.listOrders);
+router.post('/admin/broadcast',        authMiddleware, requireRole('admin'), adminCtrl.broadcast);
+router.post('/admin/make-superadmin',  authMiddleware, adminCtrl.createSuperAdmin);
 
 module.exports = router;

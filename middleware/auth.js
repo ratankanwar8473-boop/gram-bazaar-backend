@@ -12,7 +12,6 @@ const authMiddleware = async (req, res, next) => {
     const token = authHeader.split(' ')[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // Fetch fresh user from DB
     const [rows] = await db.query(
       'SELECT id, uuid, name, phone, email, role, is_active FROM users WHERE id = ?',
       [decoded.id]
@@ -33,8 +32,12 @@ const authMiddleware = async (req, res, next) => {
 };
 
 // ─── Role Guard ─────────────────────────────────────────
+// super_admin aur admin dono admin routes access kar sakte hain
 const requireRole = (...roles) => (req, res, next) => {
-  if (!roles.includes(req.user.role)) {
+  const userRole = req.user.role;
+  // super_admin can access everything admin can
+  if (userRole === 'super_admin') return next();
+  if (!roles.includes(userRole)) {
     return res.status(403).json({ success: false, message: 'Access denied. Aapko permission nahi hai.' });
   }
   next();
