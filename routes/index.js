@@ -42,8 +42,9 @@ router.post('/payment/confirm',       authMiddleware, requireRole('customer'), p
 router.get ('/payment/transactions',  authMiddleware, requireRole('seller'),   payCtrl.getTransactions);
 
 // ─── NOTIFICATIONS ───────────────────────────────────────
-router.get ('/notifications',         authMiddleware, notifCtrl.getNotifications);
-router.put ('/notifications/:id/read',authMiddleware, notifCtrl.markRead);
+router.get ('/notifications',          authMiddleware, notifCtrl.getNotifications);
+router.put ('/notifications/all/read', authMiddleware, notifCtrl.markAllRead);
+router.put ('/notifications/:id/read', authMiddleware, notifCtrl.markRead);
 
 // ─── ADMIN & SUPER ADMIN ─────────────────────────────────
 router.get ('/admin/overview',         authMiddleware, requireRole('admin'), adminCtrl.overview);

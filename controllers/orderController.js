@@ -25,22 +25,46 @@ exports.createOrder = async (req, res) => {
        booking_date || null, booking_time || null, payment_method || 'cash']
     );
 
-    // Notify seller via socket
+    const notifPayload = {
+      order_id: result.insertId,
+      order_number,
+      service_type,
+      customer_name: req.user.name,
+      customer_phone: req.user.phone,
+      total_amount
+    };
+
+    // Notify the booked seller via socket
     if (req.io) {
-      req.io.to(`seller_${seller_id}`).emit('new_order', {
-        order_id: result.insertId,
-        order_number,
-        service_type,
-        customer_name: req.user.name,
-        total_amount
-      });
+      req.io.to(`seller_${seller_id}`).emit('new_order', notifPayload);
     }
 
-    // Save notification in DB
+    // Save notification for booked seller
     await db.query(
       'INSERT INTO notifications (user_id, title, body, type, reference_id) VALUES (?,?,?,?,?)',
       [seller_id, '🔔 Nayi Booking!', `${req.user.name} ne ${service_type} book kiya – ₹${total_amount}`, 'new_order', result.insertId]
     );
+
+    // Also notify ALL OTHER online sellers of same service type
+    // so they know the slot is taken (broadcast 'order_taken')
+    try {
+      const [otherSellers] = await db.query(
+        `SELECT u.id FROM users u
+         JOIN seller_profiles sp ON sp.user_id = u.id
+         JOIN services s ON s.seller_id = u.id
+         WHERE u.role = 'seller' AND u.is_active = 1
+           AND sp.is_online = 1 AND s.type = ? AND u.id != ?`,
+        [service_type, seller_id]
+      );
+      if (req.io && otherSellers.length) {
+        otherSellers.forEach(os => {
+          req.io.to(`seller_${os.id}`).emit('order_taken', {
+            service_type,
+            message: `${service_type} ki ek booking ho gayi hai (${req.user.name} ne ${seller_id} ko book kiya)`
+          });
+        });
+      }
+    } catch(e) { /* non-critical */ }
 
     res.status(201).json({
       success: true,

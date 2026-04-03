@@ -99,17 +99,25 @@ exports.getDashboard = async (req, res) => {
       [sellerId]
     );
 
+    const [[month]] = await db.query(
+      `SELECT COALESCE(SUM(total_amount),0) as month_earned
+       FROM orders WHERE seller_id=? AND status='completed'
+       AND MONTH(completed_at)=MONTH(NOW()) AND YEAR(completed_at)=YEAR(NOW())`,
+      [sellerId]
+    );
+
     const [sp] = await db.query('SELECT rating, total_reviews, is_online FROM seller_profiles WHERE user_id=?', [sellerId]);
 
     res.json({
       success: true,
       stats: {
         ...totals,
-        today_earned: today.today_earned,
-        week_earned:  week.week_earned,
-        rating:       sp[0]?.rating || 0,
+        today_earned:  today.today_earned,
+        week_earned:   week.week_earned,
+        month_earned:  month.month_earned,
+        rating:        sp[0]?.rating || 0,
         total_reviews: sp[0]?.total_reviews || 0,
-        is_online:    sp[0]?.is_online || 0
+        is_online:     sp[0]?.is_online || 0
       }
     });
   } catch (err) {

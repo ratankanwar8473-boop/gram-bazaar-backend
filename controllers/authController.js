@@ -108,6 +108,7 @@ exports.login = async (req, res) => {
         email: user.email,
         role: user.role,
         village: user.village,
+        district: user.district,
         sellerProfile
       }
     });
