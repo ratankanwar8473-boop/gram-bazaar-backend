@@ -8,6 +8,7 @@ const sellerCtrl = require('../controllers/sellerController');
 const adminCtrl  = require('../controllers/adminController');
 const payCtrl    = require('../controllers/paymentController');
 const notifCtrl  = require('../controllers/notificationController');
+const licCtrl    = require('../controllers/licenseController');
 
 // ─── AUTH ────────────────────────────────────────────────
 router.post('/auth/register',         authCtrl.register);
@@ -51,5 +52,12 @@ router.put ('/admin/users/:id/toggle', authMiddleware, requireRole('admin'), adm
 router.get ('/admin/orders',           authMiddleware, requireRole('admin'), adminCtrl.listOrders);
 router.post('/admin/broadcast',        authMiddleware, requireRole('admin'), adminCtrl.broadcast);
 router.post('/admin/make-superadmin',  authMiddleware, adminCtrl.createSuperAdmin);
+
+// ─── LICENSES (Super Admin only) ─────────────────────────
+router.get ('/admin/licenses',              authMiddleware, requireRole('super_admin'), licCtrl.getLicenses);
+router.get ('/admin/licenses/seller/:sellerId', authMiddleware, requireRole('super_admin'), licCtrl.getSellerLicense);
+router.post('/admin/licenses',              authMiddleware, requireRole('super_admin'), licCtrl.createLicense);
+router.put ('/admin/licenses/:id',          authMiddleware, requireRole('super_admin'), licCtrl.updateLicense);
+router.delete('/admin/licenses/:id',        authMiddleware, requireRole('super_admin'), licCtrl.deleteLicense);
 
 module.exports = router;
